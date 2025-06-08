@@ -1,16 +1,4 @@
 mcp-servers:
-  - name: weather
-    image: node:18-alpine
-    command: npx
-    args:
-      - -y
-      - mcp-remote
-      - https://weather-mcp.descope.sh/sse
-  - name: github-docker
-    image: ghcr.io/github/github-mcp-server
-    interactive: true
-    env:
-      GITHUB_PERSONAL_ACCESS_TOKEN: "$GITHUB_PERSONAL_ACCESS_TOKEN"
   - name: github-npx
     image: node:18-alpine
     command: npx
