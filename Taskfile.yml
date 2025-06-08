@@ -25,4 +25,9 @@ tasks:
 
   mocks:
     desc: Install mockgen and generate all mocks
-    deps: [generate-mocks] 
+    deps: [generate-mocks]
+
+  run:
+    desc: Run the MCP Shield proxy server
+    cmds:
+      - go run cmd/proxy/main.go 
