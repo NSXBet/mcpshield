@@ -1,0 +1,28 @@
+version: '3'
+
+tasks:
+  install-mockgen:
+    desc: Install mockgen if not already installed
+    cmds:
+      - |
+        if ! command -v mockgen &> /dev/null; then
+          echo "Installing mockgen..."
+          go install go.uber.org/mock/mockgen@latest
+        else
+          echo "mockgen already installed"
+        fi
+    silent: true
+
+  generate-mocks:
+    desc: Generate mocks using mockgen
+    deps: [install-mockgen]
+    cmds:
+      - go generate ./pkg/...
+    sources:
+      - pkg/types.go
+    generates:
+      - pkg/mocks/mock_runtime.go
+
+  mocks:
+    desc: Install mockgen and generate all mocks
+    deps: [generate-mocks] 
