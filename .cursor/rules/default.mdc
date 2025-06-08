@@ -1,0 +1,9 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+- Never delete comments.
+- If you are caught in a loop or don’t know what to do, stop and ask for help.
+- If your degree of certainty is low, ask for help.
+- Don't be creative, don't invent, do what you are asked
