@@ -9,14 +9,11 @@ import (
 )
 
 func TestMCPServerWithKubernetesRuntime(t *testing.T) {
-	// Create Kubernetes client and config
-	client, clientConfig, err := createKubernetesClient()
+	// Create Kubernetes runtime factory
+	factory, err := runtime.NewKubernetesRuntimeFactory("default")
 	if err != nil {
 		t.Skipf("Skipping test: failed to create Kubernetes client: %v", err)
 	}
-
-	// Create Kubernetes runtime factory
-	factory := runtime.NewKubernetesRuntimeFactory(client, clientConfig, "default")
 
 	// Create MCP server with real runtime
 	server := mcpserver.NewMCPServer(

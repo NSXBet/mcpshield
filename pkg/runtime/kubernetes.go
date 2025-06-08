@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -39,7 +40,20 @@ type KubernetesRuntimeFactory struct {
 	namespace string
 }
 
-func NewKubernetesRuntimeFactory(client *kubernetes.Clientset, clientConfig clientcmd.ClientConfig, namespace string) pkg.RuntimeFactory {
+func NewKubernetesRuntimeFactory(namespace string) (pkg.RuntimeFactory, error) {
+	client, clientConfig, err := CreateKubernetesClient()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Kubernetes client: %w", err)
+	}
+
+	return &KubernetesRuntimeFactory{
+		client:    client,
+		config:    &KubernetesConfig{ClientConfig: clientConfig},
+		namespace: namespace,
+	}, nil
+}
+
+func NewKubernetesRuntimeFactoryWithClient(client *kubernetes.Clientset, clientConfig clientcmd.ClientConfig, namespace string) pkg.RuntimeFactory {
 	return &KubernetesRuntimeFactory{
 		client:    client,
 		config:    &KubernetesConfig{ClientConfig: clientConfig},
@@ -60,7 +74,20 @@ func (f *KubernetesRuntimeFactory) CreateRuntime(image, command string, args []s
 }
 
 func (k *KubernetesRuntime) Start(ctx context.Context) error {
-	k.deploymentName = fmt.Sprintf("mcp-%s-%d", k.getCleanName(), time.Now().Unix())
+	k.deploymentName = fmt.Sprintf("mcp-%s", k.getCleanName())
+	
+	// Check if deployment already exists and delete it
+	_, err := k.client.AppsV1().Deployments(k.namespace).Get(ctx, k.deploymentName, metav1.GetOptions{})
+	if err == nil {
+		// Deployment exists, delete it first
+		if err := k.deleteDeployment(ctx); err != nil {
+			return fmt.Errorf("failed to delete existing deployment: %w", err)
+		}
+		// Wait for deletion to complete
+		if err := k.waitForDeploymentDeleted(ctx); err != nil {
+			return fmt.Errorf("failed to wait for deployment deletion: %w", err)
+		}
+	}
 	
 	if err := k.createDeployment(ctx); err != nil {
 		return fmt.Errorf("failed to create deployment: %w", err)
@@ -100,7 +127,13 @@ func (k *KubernetesRuntime) Stop() error {
 		return nil
 	}
 	
-	return k.deleteDeployment(context.Background())
+	ctx := context.Background()
+	if err := k.deleteDeployment(ctx); err != nil {
+		return err
+	}
+	
+	// Wait for deployment to be fully deleted
+	return k.waitForDeploymentDeleted(ctx)
 }
 
 func (k *KubernetesRuntime) IsReady() bool {
@@ -212,6 +245,27 @@ func (k *KubernetesRuntime) deleteDeployment(ctx context.Context) error {
 	)
 }
 
+func (k *KubernetesRuntime) waitForDeploymentDeleted(ctx context.Context) error {
+	timeout := time.After(60 * time.Second)
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+	
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-timeout:
+			return fmt.Errorf("timeout waiting for deployment %s to be deleted", k.deploymentName)
+		case <-ticker.C:
+			_, err := k.client.AppsV1().Deployments(k.namespace).Get(ctx, k.deploymentName, metav1.GetOptions{})
+			if err != nil {
+				// Deployment not found, deletion successful
+				return nil
+			}
+		}
+	}
+}
+
 func (k *KubernetesRuntime) getPodFromDeployment() (string, error) {
 	labelSelector := fmt.Sprintf("app=mcp-bridge,deployment=%s", k.deploymentName)
 	pods, err := k.client.CoreV1().Pods(k.namespace).List(
@@ -319,4 +373,24 @@ func (k *KubernetesRuntime) getCleanName() string {
 		name = name[:40]
 	}
 	return name
+}
+
+func CreateKubernetesClient() (*kubernetes.Clientset, clientcmd.ClientConfig, error) {
+	kubeconfig := filepath.Join(os.Getenv("HOME"), ".kube", "config")
+	config := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
+		&clientcmd.ClientConfigLoadingRules{ExplicitPath: kubeconfig},
+		&clientcmd.ConfigOverrides{},
+	)
+
+	restConfig, err := config.ClientConfig()
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to build config: %w", err)
+	}
+
+	client, err := kubernetes.NewForConfig(restConfig)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create client: %w", err)
+	}
+
+	return client, config, nil
 } 

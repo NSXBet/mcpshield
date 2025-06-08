@@ -1,3 +1,7 @@
+runtime:
+  kubernetes:
+    namespace: default
+
 mcp-servers:
   - name: github-npx
     image: node:18-alpine

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/nsxbet/mcpshield/pkg"
 )
@@ -50,6 +51,10 @@ func (m *MCPServer) Start(ctx context.Context) error {
 func (m *MCPServer) Stop() {
 	if m.cancel != nil {
 		m.cancel()
+	}
+	// Directly call runtime.Stop() to ensure cleanup completes
+	if m.runtime != nil {
+		m.runtime.Stop()
 	}
 }
 
@@ -101,7 +106,62 @@ func (m *MCPServer) ListTools() (*pkg.MCPResponse, error) {
 		Method:  "tools/list",
 	}
 	
-	return m.Call(request)
+	response, err := m.Call(request)
+	if err != nil {
+		return nil, err
+	}
+	
+	// Prefix tool names with ms_servername_
+	if response.Result != nil {
+		if result, ok := response.Result.(map[string]interface{}); ok {
+			if tools, ok := result["tools"].([]interface{}); ok {
+				cleanServerName := m.getCleanServerName()
+				for _, tool := range tools {
+					if toolMap, ok := tool.(map[string]interface{}); ok {
+						if name, ok := toolMap["name"].(string); ok {
+							newName := fmt.Sprintf("ms_%s_%s", cleanServerName, name)
+							toolMap["name"] = newName
+						}
+					}
+				}
+			}
+		}
+	}
+	
+	return response, nil
+}
+
+func (m *MCPServer) getCleanServerName() string {
+	result := ""
+	for _, char := range m.Name {
+		if (char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') || 
+		   (char >= '0' && char <= '9') || char == '-' {
+			result += string(char)
+		}
+	}
+	return result
+}
+
+// ExtractServerNameFromTool gets server name from prefixed tool name
+func ExtractServerNameFromTool(toolName string) string {
+	if strings.HasPrefix(toolName, "ms_") {
+		parts := strings.SplitN(toolName[3:], "_", 2) // Remove "ms_" and split on first "_"
+		if len(parts) == 2 {
+			return parts[0] // Server name
+		}
+	}
+	return ""
+}
+
+// ExtractOriginalToolName gets original tool name by removing server prefix
+func ExtractOriginalToolName(toolName string) string {
+	if strings.HasPrefix(toolName, "ms_") {
+		parts := strings.SplitN(toolName[3:], "_", 2) // Remove "ms_" and split on first "_"
+		if len(parts) == 2 {
+			return parts[1] // Original tool name
+		}
+	}
+	return toolName
 }
 
 func (m *MCPServer) GetName() string {
