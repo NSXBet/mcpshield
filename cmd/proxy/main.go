@@ -7,11 +7,14 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"gopkg.in/yaml.v2"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -75,22 +78,50 @@ func main() {
 		mcpConfig: mcpConfig,
 	}
 
-	// Create all MCP server pods at startup
-	err = proxy.initializeMCPServerPods()
+	// Create all MCP server deployments at startup
+	err = proxy.initializeMCPServerDeployments()
 	if err != nil {
-		log.Fatalf("Failed to initialize MCP server pods: %v", err)
+		log.Fatalf("Failed to initialize MCP server deployments: %v", err)
 	}
+
+	// Setup graceful shutdown
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
 	// Setup HTTP routes
 	http.HandleFunc("/mcp", proxy.handleMCP)
 	http.HandleFunc("/health", handleHealth)
 
-	port := "8080"
-	fmt.Printf("✅ MCP Bridge Proxy ready\n")
-	fmt.Printf("🌐 MCP endpoint: http://localhost:%s/mcp\n", port)
-	fmt.Printf("📍 Kubernetes namespace: %s\n", proxy.namespace)
+	// Start HTTP server in a goroutine
+	server := &http.Server{Addr: ":8080"}
+	go func() {
+		port := "8080"
+		fmt.Printf("✅ MCP Bridge Proxy ready\n")
+		fmt.Printf("🌐 MCP endpoint: http://localhost:%s/mcp\n", port)
+		fmt.Printf("📍 Kubernetes namespace: %s\n", proxy.namespace)
+		
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("HTTP server failed: %v", err)
+		}
+	}()
 
-	log.Fatal(http.ListenAndServe(":"+port, nil))
+	// Wait for shutdown signal
+	<-sigChan
+	fmt.Println("\n🛑 Shutdown signal received, cleaning up...")
+
+	// Cleanup deployments
+	if err := proxy.cleanupMCPServerDeployments(); err != nil {
+		log.Printf("Error during cleanup: %v", err)
+	}
+
+	// Graceful shutdown of HTTP server
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := server.Shutdown(ctx); err != nil {
+		log.Printf("HTTP server shutdown error: %v", err)
+	}
+
+	fmt.Println("👋 MCP Bridge Proxy stopped")
 }
 
 func (p *MCPProxy) handleMCP(w http.ResponseWriter, r *http.Request) {
@@ -160,11 +191,15 @@ func (p *MCPProxy) forwardToMCPServer(request *MCPRequest) (*MCPResponse, error)
 		}
 	}
 
-	// Use existing pod for this server
-	podName := fmt.Sprintf("mcp-%s", serverName)
+	// Find pod from deployment
+	deploymentName := fmt.Sprintf("mcp-%s", serverName)
+	podName, err := p.getPodFromDeployment(deploymentName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get pod from deployment %s: %w", deploymentName, err)
+	}
 
 	// Wait for pod to be ready (in case it's still starting up)
-	err := p.waitForPodReady(podName)
+	err = p.waitForPodReady(podName)
 	if err != nil {
 		return nil, fmt.Errorf("pod not ready: %w", err)
 	}
@@ -187,13 +222,14 @@ func (p *MCPProxy) getServerConfig(serverName string) *MCPServer {
 	return nil
 }
 
-func (p *MCPProxy) createMCPServerPod(serverName string) (string, error) {
+func (p *MCPProxy) createMCPServerDeployment(serverName string) (string, error) {
 	serverConfig := p.getServerConfig(serverName)
 	if serverConfig == nil {
 		return "", fmt.Errorf("server not found in config: %s", serverName)
 	}
 
-	podName := fmt.Sprintf("mcp-%s", serverName)
+	deploymentName := fmt.Sprintf("mcp-%s", serverName)
+	replicas := int32(1)
 
 	envVars := []corev1.EnvVar{}
 	for key, value := range serverConfig.Env {
@@ -204,40 +240,147 @@ func (p *MCPProxy) createMCPServerPod(serverName string) (string, error) {
 		})
 	}
 
-	pod := &corev1.Pod{
+	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      podName,
+			Name:      deploymentName,
 			Namespace: p.namespace,
 			Labels: map[string]string{
-				"app": "mcp-bridge",
+				"app":    "mcp-bridge",
+				"server": serverName,
 			},
 		},
-		Spec: corev1.PodSpec{
-			RestartPolicy: corev1.RestartPolicyNever,
-			Containers: []corev1.Container{
-				{
-					Name:    serverConfig.Name,
-					Image:   serverConfig.Image,
-					Command: []string{serverConfig.Command},
-					Args:    serverConfig.Args,
-					Env:     envVars,
-					Stdin:   true,
-					TTY:     true,
+		Spec: appsv1.DeploymentSpec{
+			Replicas: &replicas,
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"app":    "mcp-bridge",
+					"server": serverName,
+				},
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						"app":    "mcp-bridge",
+						"server": serverName,
+					},
+				},
+				Spec: corev1.PodSpec{
+					RestartPolicy: corev1.RestartPolicyAlways,
+					Containers: []corev1.Container{
+						{
+							Name:    serverConfig.Name,
+							Image:   serverConfig.Image,
+							Command: []string{serverConfig.Command},
+							Args:    serverConfig.Args,
+							Env:     envVars,
+							Stdin:   true,
+							TTY:     true,
+						},
+					},
 				},
 			},
 		},
 	}
 
-	_, err := p.client.CoreV1().Pods(p.namespace).Create(
+	_, err := p.client.AppsV1().Deployments(p.namespace).Create(
 		context.TODO(),
-		pod,
+		deployment,
 		metav1.CreateOptions{},
 	)
 	if err != nil {
 		return "", err
 	}
 
-	return podName, nil
+	return deploymentName, nil
+}
+
+func (p *MCPProxy) waitForDeploymentReady(deploymentName string) error {
+	timeout := time.After(60 * time.Second)
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-timeout:
+			return fmt.Errorf("timeout waiting for deployment %s", deploymentName)
+		case <-ticker.C:
+			deployment, err := p.client.AppsV1().Deployments(p.namespace).Get(
+				context.TODO(),
+				deploymentName,
+				metav1.GetOptions{},
+			)
+			if err != nil {
+				continue
+			}
+
+			if deployment.Status.ReadyReplicas >= *deployment.Spec.Replicas {
+				return nil
+			}
+		}
+	}
+}
+
+func (p *MCPProxy) deleteDeployment(deploymentName string) error {
+	propagationPolicy := metav1.DeletePropagationForeground
+	err := p.client.AppsV1().Deployments(p.namespace).Delete(
+		context.TODO(),
+		deploymentName,
+		metav1.DeleteOptions{
+			PropagationPolicy: &propagationPolicy,
+		},
+	)
+	return err
+}
+
+func (p *MCPProxy) waitForDeploymentDeleted(deploymentName string) error {
+	timeout := time.After(60 * time.Second)
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-timeout:
+			return fmt.Errorf("timeout waiting for deployment %s to be deleted", deploymentName)
+		case <-ticker.C:
+			_, err := p.client.AppsV1().Deployments(p.namespace).Get(
+				context.TODO(),
+				deploymentName,
+				metav1.GetOptions{},
+			)
+			if err != nil {
+				// Deployment not found, deletion successful
+				return nil
+			}
+		}
+	}
+}
+
+func (p *MCPProxy) getPodFromDeployment(deploymentName string) (string, error) {
+	// Get pods with the deployment labels
+	labelSelector := fmt.Sprintf("app=mcp-bridge,server=%s", strings.TrimPrefix(deploymentName, "mcp-"))
+	pods, err := p.client.CoreV1().Pods(p.namespace).List(
+		context.TODO(),
+		metav1.ListOptions{
+			LabelSelector: labelSelector,
+		},
+	)
+	if err != nil {
+		return "", err
+	}
+
+	if len(pods.Items) == 0 {
+		return "", fmt.Errorf("no pods found for deployment %s", deploymentName)
+	}
+
+	// Return the first running pod
+	for _, pod := range pods.Items {
+		if pod.Status.Phase == corev1.PodRunning {
+			return pod.Name, nil
+		}
+	}
+
+	// If no running pods, return the first pod
+	return pods.Items[0].Name, nil
 }
 
 func (p *MCPProxy) waitForPodReady(podName string) error {
@@ -392,15 +535,6 @@ func (p *MCPProxy) execInPod(podName string, cmd []string) (string, string, erro
 	return stdout.String(), stderr.String(), err
 }
 
-func (p *MCPProxy) deletePod(podName string) error {
-	err := p.client.CoreV1().Pods(p.namespace).Delete(
-		context.TODO(),
-		podName,
-		metav1.DeleteOptions{},
-	)
-	return err
-}
-
 func handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
@@ -444,69 +578,64 @@ func readMCPConfig(filename string) (*MCPConfig, error) {
 	return &config, nil
 }
 
-func (p *MCPProxy) waitForPodDeleted(podName string) error {
-	timeout := time.After(30 * time.Second)
-	ticker := time.NewTicker(1 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-timeout:
-			return fmt.Errorf("timeout waiting for pod %s to be deleted", podName)
-		case <-ticker.C:
-			_, err := p.client.CoreV1().Pods(p.namespace).Get(
-				context.TODO(),
-				podName,
-				metav1.GetOptions{},
-			)
-			if err != nil {
-				// Pod not found, deletion successful
-				return nil
-			}
-		}
-	}
-}
-
-func (p *MCPProxy) initializeMCPServerPods() error {
-	fmt.Printf("🚀 Initializing MCP server pods...\n")
+func (p *MCPProxy) initializeMCPServerDeployments() error {
+	fmt.Printf("🚀 Initializing MCP server deployments...\n")
 	
 	for _, server := range p.mcpConfig.MCPServers {
-		podName := fmt.Sprintf("mcp-%s", server.Name)
+		deploymentName := fmt.Sprintf("mcp-%s", server.Name)
 		
-		// Check if pod already exists, delete if it does
-		_, err := p.client.CoreV1().Pods(p.namespace).Get(
+		// Check if deployment already exists
+		_, err := p.client.AppsV1().Deployments(p.namespace).Get(
 			context.TODO(),
-			podName,
+			deploymentName,
 			metav1.GetOptions{},
 		)
 		if err == nil {
-			// Pod exists, delete it first
-			log.Printf("🔄 Deleting existing pod %s", podName)
-			if err := p.deletePod(podName); err != nil {
-				log.Printf("Warning: Failed to delete existing pod %s: %v", podName, err)
-			}
-			// Wait for pod to be deleted
-			err = p.waitForPodDeleted(podName)
-			if err != nil {
-				return fmt.Errorf("failed to delete existing pod %s: %w", podName, err)
-			}
+			// Deployment already exists, skip creation
+			log.Printf("✅ Deployment %s already exists, skipping creation", deploymentName)
+			continue
 		}
 		
-		log.Printf("Creating pod for MCP server: %s", server.Name)
-		podName, err = p.createMCPServerPod(server.Name)
+		log.Printf("🚀 Creating deployment for MCP server: %s", server.Name)
+		deploymentName, err = p.createMCPServerDeployment(server.Name)
 		if err != nil {
-			return fmt.Errorf("failed to create pod for server %s: %w", server.Name, err)
+			return fmt.Errorf("failed to create deployment for server %s: %w", server.Name, err)
 		}
 		
-		log.Printf("Waiting for pod %s to be ready...", podName)
-		err = p.waitForPodReady(podName)
+		log.Printf("⏳ Waiting for deployment %s to be ready...", deploymentName)
+		err = p.waitForDeploymentReady(deploymentName)
 		if err != nil {
-			return fmt.Errorf("pod %s not ready: %w", podName, err)
+			return fmt.Errorf("deployment %s not ready: %w", deploymentName, err)
 		}
 		
-		log.Printf("✅ Pod %s is ready", podName)
+		log.Printf("✅ Deployment %s is ready and running", deploymentName)
 	}
 	
-	fmt.Printf("✅ All MCP server pods initialized\n")
+	fmt.Printf("🎉 All MCP server deployments initialized successfully\n")
+	return nil
+}
+
+func (p *MCPProxy) cleanupMCPServerDeployments() error {
+	fmt.Printf("🚀 Cleaning up MCP server deployments...\n")
+	
+	for _, server := range p.mcpConfig.MCPServers {
+		deploymentName := fmt.Sprintf("mcp-%s", server.Name)
+		
+		log.Printf("🚀 Deleting deployment for MCP server: %s", server.Name)
+		err := p.deleteDeployment(deploymentName)
+		if err != nil {
+			return fmt.Errorf("failed to delete deployment for server %s: %w", server.Name, err)
+		}
+		
+		log.Printf("⏳ Waiting for deployment %s to be deleted...", deploymentName)
+		err = p.waitForDeploymentDeleted(deploymentName)
+		if err != nil {
+			return fmt.Errorf("deployment %s not deleted: %w", deploymentName, err)
+		}
+		
+		log.Printf("✅ Deployment %s is deleted", deploymentName)
+	}
+	
+	fmt.Printf("🎉 All MCP server deployments cleaned up successfully\n")
 	return nil
 } 
