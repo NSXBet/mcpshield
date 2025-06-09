@@ -9,8 +9,6 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
-
-
 func TestMCPServerLifecycle(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
@@ -18,7 +16,7 @@ func TestMCPServerLifecycle(t *testing.T) {
 	mockRuntime.EXPECT().Start(gomock.Any()).Return(nil)
 	mockRuntime.EXPECT().IsReady().Return(true).AnyTimes()
 	mockRuntime.EXPECT().Exec(gomock.Any(), gomock.Any()).Return([]byte(`{"jsonrpc":"2.0","id":1,"result":{"tools":[]}}`), nil).AnyTimes()
-	mockRuntime.EXPECT().Stop().Return(nil).AnyTimes()
+	mockRuntime.EXPECT().Stop(gomock.Any()).Return(nil).AnyTimes()
 
 	mockFactory := mocks.NewMockRuntimeFactory(ctrl)
 	mockFactory.EXPECT().CreateRuntime(
@@ -44,7 +42,7 @@ func TestMCPServerLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to start server: %v", err)
 	}
-	defer server.Stop()
+	defer server.Stop(ctx)
 
 	if !server.IsReady() {
 		t.Fatal("Server should be ready after start")
@@ -55,12 +53,12 @@ func TestMCPServerLifecycle(t *testing.T) {
 		ID:      1,
 		Method:  "tools/list",
 	}
-	response, err := server.ListTools(listRequest)
+	result, err := server.Call(listRequest)
 	if err != nil {
 		t.Fatalf("Failed to list tools: %v", err)
 	}
 
-	if response.Result == nil {
+	if result == nil {
 		t.Fatal("Expected tools list result")
 	}
 
@@ -73,7 +71,7 @@ func TestMCPServerLifecycle(t *testing.T) {
 			"arguments": map[string]interface{}{"query": "test query"},
 		},
 	}
-	response, err = server.Call(request)
+	response, err := server.Call(request)
 	if err != nil {
 		t.Fatalf("Failed to call tool: %v", err)
 	}

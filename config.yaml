@@ -1,3 +1,36 @@
+# MCPShield Server Configuration
+# This file configures the mcpshield-server
+
+# API Configuration
+api:
+  # Base endpoint for the MCPShield API (required)
+  endpoint: "http://127.0.0.1:8080"
+  # API version to use
+  version: "v1"
+  # Request timeout in seconds
+  timeout: 30
+
+# Authentication Configuration
+auth:
+  # Authentication timeout in seconds
+  timeout: 30
+
+# Logging Configuration
+log:
+  # Log level: debug, info, warn, error
+  level: "info"
+  # Log format: text, json
+  format: "text"
+  # Enable colored output
+  color: true
+
+# Server Configuration
+server:
+  # Server host
+  host: "0.0.0.0"
+  # Server port
+  port: 8080
+
 runtime:
   kubernetes:
     namespace: default

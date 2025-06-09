@@ -10,3 +10,4 @@ alwaysApply: true
 - If are bad, if elses are unacceptable
 - use early returns when posible
 - Separation of concerns, everything belong somewhere, don't cross domains, packages in the same level don't call each other
+- ifs are bad nestings are worse, dont do it, avoid

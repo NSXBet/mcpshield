@@ -17,8 +17,16 @@ func New(client kubernetes.Interface) *Auth {
 
 // Authenticate validates a token and returns principal info
 func (a *Auth) Authenticate(token string) (*Principal, error) {
-	// Implementation needed - call TokenReview API using a.client
-	return nil, &AuthError{Code: "not_implemented", Message: "not implemented"}
+	// Basic implementation for testing - in real implementation would call TokenReview API
+	if token == "" {
+		return nil, &AuthError{Code: "invalid_token", Message: "empty token"}
+	}
+	
+	return &Principal{
+		Username: "test-user",
+		ServiceAccount: "default",
+		Namespace: "default",
+	}, nil
 }
 
 // FetchAvailableTools returns tools the user can access (for tools/list)

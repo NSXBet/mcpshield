@@ -122,12 +122,11 @@ func (k *KubernetesRuntime) Exec(ctx context.Context, input []byte) ([]byte, err
 	return []byte(stdout), nil
 }
 
-func (k *KubernetesRuntime) Stop() error {
+func (k *KubernetesRuntime) Stop(ctx context.Context) error {
 	if k.deploymentName == "" {
 		return nil
 	}
 	
-	ctx := context.Background()
 	if err := k.deleteDeployment(ctx); err != nil {
 		return err
 	}

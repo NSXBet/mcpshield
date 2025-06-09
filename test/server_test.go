@@ -1,4 +1,4 @@
-package main
+package test
 
 import (
 	"context"
@@ -34,7 +34,7 @@ func TestMCPServerWithKubernetesRuntime(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to start server: %v", err)
 	}
-	defer server.Stop()
+	defer server.Stop(ctx)
 
 	// Wait for server to be ready
 	if !server.IsReady() {
@@ -47,14 +47,14 @@ func TestMCPServerWithKubernetesRuntime(t *testing.T) {
 		ID:      1,
 		Method:  "tools/list",
 	}
-	response, err := server.ListTools(listRequest)
+	toolsResult, err := server.Call(listRequest)
 	if err != nil {
-		t.Logf("⚠️  ListTools error (expected for auth issues): %v", err)
+		t.Logf("⚠️  Call error (expected for auth issues): %v", err)
 		// Don't fail for auth errors - they're expected without valid tokens
 		return
 	}
 
-	if response.Result == nil {
+	if toolsResult == nil {
 		t.Fatal("Expected tools list result")
 	}
 
@@ -72,14 +72,14 @@ func TestMCPServerWithKubernetesRuntime(t *testing.T) {
 			},
 		},
 	}
-	response, err = server.Call(request)
+	callResponse, err := server.Call(request)
 	if err != nil {
 		t.Logf("⚠️  Call error (expected for auth issues): %v", err)
 		// Don't fail for auth errors - they're expected without valid tokens
 		return
 	}
 
-	if response.Result == nil {
+	if callResponse.Result == nil {
 		t.Fatal("Expected tool call result")
 	}
 

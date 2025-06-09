@@ -85,17 +85,17 @@ func (mr *MockRuntimeMockRecorder) Start(ctx any) *gomock.Call {
 }
 
 // Stop mocks base method.
-func (m *MockRuntime) Stop() error {
+func (m *MockRuntime) Stop(ctx context.Context) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Stop")
+	ret := m.ctrl.Call(m, "Stop", ctx)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Stop indicates an expected call of Stop.
-func (mr *MockRuntimeMockRecorder) Stop() *gomock.Call {
+func (mr *MockRuntimeMockRecorder) Stop(ctx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*MockRuntime)(nil).Stop))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*MockRuntime)(nil).Stop), ctx)
 }
 
 // MockRuntimeFactory is a mock of RuntimeFactory interface.

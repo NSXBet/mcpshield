@@ -1,0 +1,40 @@
+# MCPShield CLI Configuration
+# This file configures the mcpshield CLI tool
+
+# API Configuration
+api:
+  # Base endpoint for the MCPShield API
+  endpoint: "http://127.0.0.1:8080"
+  # API version to use
+  version: "v1"
+  # Request timeout in seconds
+  timeout: 30
+
+# Authentication Configuration
+auth:
+  # Authentication timeout in seconds
+  timeout: 30
+  # Path where authentication tokens are stored
+  token_path: "~/.mcpshield/token"
+  # Token refresh threshold in seconds (refresh when expiry < threshold)
+  refresh_threshold: 300
+  # Authentication method (token, oauth, etc.)
+  method: "token"
+
+# Logging Configuration
+log:
+  # Log level: debug, info, warn, error
+  level: "info"
+  # Log format: text, json
+  format: "text"
+  # Enable colored output
+  color: true
+
+# Output Configuration
+output:
+  # Default output format: table, json, yaml
+  format: "table"
+  # Enable pretty printing
+  pretty: true
+  # Show timestamps in output
+  timestamps: false 
