@@ -43,20 +43,6 @@ type RuntimeConfig struct {
 	Kubernetes *KubernetesConfig `yaml:"kubernetes"`
 }
 
-type MCPRequest struct {
-	JSONRPC string      `json:"jsonrpc"`
-	ID      interface{} `json:"id"`
-	Method  string      `json:"method"`
-	Params  interface{} `json:"params,omitempty"`
-}
-
-type MCPResponse struct {
-	JSONRPC string      `json:"jsonrpc"`
-	ID      interface{} `json:"id"`
-	Result  interface{} `json:"result,omitempty"`
-	Error   interface{} `json:"error,omitempty"`
-}
-
 func main() {
 	fmt.Println("🚀 Starting MCP Bridge Proxy...")
 
@@ -179,7 +165,7 @@ func (p *MCPProxy) handleMCP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var request MCPRequest
+	var request pkg.MCPRequest
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		http.Error(w, "Invalid JSON", http.StatusBadRequest)
 		return
@@ -191,7 +177,7 @@ func (p *MCPProxy) handleMCP(w http.ResponseWriter, r *http.Request) {
 	// Route request to appropriate server
 	response, err := p.routeRequest(&request)
 	if err != nil {
-		response = &MCPResponse{
+		response = &pkg.MCPResponse{
 			JSONRPC: "2.0",
 			ID:      request.ID,
 			Error:   map[string]interface{}{"code": -32603, "message": err.Error()},
@@ -206,7 +192,7 @@ func (p *MCPProxy) handleMCP(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-func (p *MCPProxy) routeRequest(request *MCPRequest) (*MCPResponse, error) {
+func (p *MCPProxy) routeRequest(request *pkg.MCPRequest) (*pkg.MCPResponse, error) {
 	serverName := p.getTargetServer(request)
 	
 	server, exists := p.servers[serverName]
@@ -226,22 +212,14 @@ func (p *MCPProxy) routeRequest(request *MCPRequest) (*MCPResponse, error) {
 		Params:  request.Params,
 	}
 
-	// Handle tool name extraction for tools/call
-	if request.Method == "tools/call" {
-		if params, ok := request.Params.(map[string]interface{}); ok {
-			if toolName, ok := params["name"].(string); ok {
-				originalToolName := mcpserver.ExtractOriginalToolName(toolName)
-				params["name"] = originalToolName
-			}
-		}
-	}
+
 
 	response, err := server.Call(mcpRequest)
 	if err != nil {
 		return nil, err
 	}
 
-	return &MCPResponse{
+	return &pkg.MCPResponse{
 		JSONRPC: response.JSONRPC,
 		ID:      response.ID,
 		Result:  response.Result,
@@ -249,15 +227,12 @@ func (p *MCPProxy) routeRequest(request *MCPRequest) (*MCPResponse, error) {
 	}, nil
 }
 
-func (p *MCPProxy) getTargetServer(request *MCPRequest) string {
+func (p *MCPProxy) getTargetServer(request *pkg.MCPRequest) string {
 	// For tools/call, extract server from tool name
 	if request.Method == "tools/call" {
-		if params, ok := request.Params.(map[string]interface{}); ok {
-			if toolName, ok := params["name"].(string); ok {
-				if serverName := mcpserver.ExtractServerNameFromTool(toolName); serverName != "" {
-					return serverName
-				}
-			}
+		serverName := request.GetServerName()
+		if serverName != "" {
+			return serverName
 		}
 	}
 	

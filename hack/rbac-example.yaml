@@ -1,0 +1,43 @@
+---
+# ServiceAccount for MCP users
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: mcp-user
+  namespace: default
+---
+# Secret with fake token for testing
+apiVersion: v1
+kind: Secret
+type: kubernetes.io/service-account-token
+metadata:
+  name: mcp-user.token
+  namespace: default
+  annotations:
+    kubernetes.io/service-account.name: mcp-user
+data:
+  token: ZXlKaGJHY2lPaUpTVXpJMU5pSXNJbXRwWkNJNkluUTVOVGRoTFRjdE5EWm1OaTAwWVRSaUxUazROVFl0WkRnd1pEUTJNakUxTnpReUluMC5leUpwYzNNaU9pSnJkV0psY201bGRHVnpMMk52Y201bGVHUTVjSEZ2YVc1MElpd2lhM1ZpWlhKdVpYUmxjeTVwYnk5elpYSjJhV05sWVdOamIzVnVkQzl1WVcxbGMzQmhZMlVpT2lKa1pXWmhkV3gwSWl3aWEzVmlaWEp1WlhSbGN5NXBieTl6WlhKMmFXTmxZV05qYjNWdWRDOXpaV055WlhRdWJtRnRaU0k2SW0xa2NTMTFjMlZ5SWl3aWEzVmlaWEp1WlhSbGN5NXBieTl6WlhKMmFXTmxZV05qYjNWdWRDOXpaWEoyYVdObExXRmpZMjkxYm5RdWRXbGtJam9pTURBd09UaGpNelF0WVc1aVltUXRORFJoWXkwNE9UZzVMVGczT1JKa05qUTBZalV6TkNJc0ltNWlaaUk2TVRZNU9USTBNRQ==
+---
+# ClusterRole for GitHub MCP server access (developer permissions)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: mcp-github-access
+rules:
+- apiGroups: ["mcpshield.io"]
+  resources: ["github-npx"]
+  verbs: ["search_repositories", "get_file_contents"]
+---
+# ClusterRoleBinding for dev user
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: mcp-user-binding
+subjects:
+- kind: ServiceAccount
+  name: mcp-user
+  namespace: default
+roleRef:
+  kind: ClusterRole
+  name: mcp-github-access
+  apiGroup: rbac.authorization.k8s.io 

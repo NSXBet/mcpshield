@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/nsxbet/mcpshield/pkg"
 )
@@ -142,27 +141,7 @@ func (m *MCPServer) getCleanServerName() string {
 	return result
 }
 
-// ExtractServerNameFromTool gets server name from prefixed tool name
-func ExtractServerNameFromTool(toolName string) string {
-	if strings.HasPrefix(toolName, "ms_") {
-		parts := strings.SplitN(toolName[3:], "_", 2) // Remove "ms_" and split on first "_"
-		if len(parts) == 2 {
-			return parts[0] // Server name
-		}
-	}
-	return ""
-}
 
-// ExtractOriginalToolName gets original tool name by removing server prefix
-func ExtractOriginalToolName(toolName string) string {
-	if strings.HasPrefix(toolName, "ms_") {
-		parts := strings.SplitN(toolName[3:], "_", 2) // Remove "ms_" and split on first "_"
-		if len(parts) == 2 {
-			return parts[1] // Original tool name
-		}
-	}
-	return toolName
-}
 
 func (m *MCPServer) GetName() string {
 	return m.Name
