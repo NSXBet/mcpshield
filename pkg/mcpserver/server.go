@@ -84,27 +84,7 @@ func (m *MCPServer) Call(request *pkg.MCPRequest) (*pkg.MCPResponse, error) {
 	return &response, nil
 }
 
-func (m *MCPServer) CallTool(toolName string, arguments interface{}) (*pkg.MCPResponse, error) {
-	request := &pkg.MCPRequest{
-		JSONRPC: "2.0",
-		ID:      1,
-		Method:  "tools/call",
-		Params: map[string]interface{}{
-			"name":      toolName,
-			"arguments": arguments,
-		},
-	}
-	
-	return m.Call(request)
-}
-
-func (m *MCPServer) ListTools() (*pkg.MCPResponse, error) {
-	request := &pkg.MCPRequest{
-		JSONRPC: "2.0",
-		ID:      1,
-		Method:  "tools/list",
-	}
-	
+func (m *MCPServer) ListTools(request *pkg.MCPRequest) (*pkg.MCPResponse, error) {
 	response, err := m.Call(request)
 	if err != nil {
 		return nil, err

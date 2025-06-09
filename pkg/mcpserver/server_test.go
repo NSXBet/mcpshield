@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/nsxbet/mcpshield/pkg"
 	"github.com/nsxbet/mcpshield/pkg/mocks"
 	"go.uber.org/mock/gomock"
 )
@@ -49,7 +50,12 @@ func TestMCPServerLifecycle(t *testing.T) {
 		t.Fatal("Server should be ready after start")
 	}
 
-	response, err := server.ListTools()
+	listRequest := &pkg.MCPRequest{
+		JSONRPC: "2.0",
+		ID:      1,
+		Method:  "tools/list",
+	}
+	response, err := server.ListTools(listRequest)
 	if err != nil {
 		t.Fatalf("Failed to list tools: %v", err)
 	}
@@ -58,9 +64,16 @@ func TestMCPServerLifecycle(t *testing.T) {
 		t.Fatal("Expected tools list result")
 	}
 
-	response, err = server.CallTool("mock_tool", map[string]interface{}{
-		"query": "test query",
-	})
+	request := &pkg.MCPRequest{
+		JSONRPC: "2.0",
+		ID:      1,
+		Method:  "tools/call",
+		Params: map[string]interface{}{
+			"name":      "mock_tool",
+			"arguments": map[string]interface{}{"query": "test query"},
+		},
+	}
+	response, err = server.Call(request)
 	if err != nil {
 		t.Fatalf("Failed to call tool: %v", err)
 	}

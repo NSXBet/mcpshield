@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/nsxbet/mcpshield/pkg"
 	"github.com/nsxbet/mcpshield/pkg/mcpserver"
 	"github.com/nsxbet/mcpshield/pkg/runtime"
 )
@@ -41,7 +42,12 @@ func TestMCPServerWithKubernetesRuntime(t *testing.T) {
 	}
 
 	// Test tools list
-	response, err := server.ListTools()
+	listRequest := &pkg.MCPRequest{
+		JSONRPC: "2.0",
+		ID:      1,
+		Method:  "tools/list",
+	}
+	response, err := server.ListTools(listRequest)
 	if err != nil {
 		t.Logf("⚠️  ListTools error (expected for auth issues): %v", err)
 		// Don't fail for auth errors - they're expected without valid tokens
@@ -53,13 +59,22 @@ func TestMCPServerWithKubernetesRuntime(t *testing.T) {
 	}
 
 	// Test tool call
-	response, err = server.CallTool("search_repositories", map[string]interface{}{
-		"query":   "stars:>1",
-		"page":    1,
-		"perPage": 5,
-	})
+	request := &pkg.MCPRequest{
+		JSONRPC: "2.0",
+		ID:      1,
+		Method:  "tools/call",
+		Params: map[string]interface{}{
+			"name": "search_repositories",
+			"arguments": map[string]interface{}{
+				"query":   "stars:>1",
+				"page":    1,
+				"perPage": 5,
+			},
+		},
+	}
+	response, err = server.Call(request)
 	if err != nil {
-		t.Logf("⚠️  CallTool error (expected for auth issues): %v", err)
+		t.Logf("⚠️  Call error (expected for auth issues): %v", err)
 		// Don't fail for auth errors - they're expected without valid tokens
 		return
 	}
