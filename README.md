@@ -1,3 +1,5 @@
+![image](https://github.com/user-attachments/assets/d9d359f2-c98f-4e39-bfc9-2f153fa112ec)
+
 # MCP Shield
 
 Security proxy for Model Context Protocol (MCP) servers. Runs MCP servers in containers and provides a unified HTTP endpoint.
