@@ -6,17 +6,6 @@ This document illustrates the difference between a standard Model Context Protoc
 
 ```mermaid
 graph TD
-    subgraph "Standard MCP Flow"
-        Client1[Client e.g., Cursor]
-        MCPServer1[Directly Configured MCP Server]
-        Service1[External Service e.g., GitHub API]
-
-        Client1 -- "Invoke Tool" --> MCPServer1
-        MCPServer1 -- "Authenticate & Call Service" --> Service1
-        Service1 -- "Return Data" --> MCPServer1
-        MCPServer1 -- "Return Result" --> Client1
-    end
-
     subgraph "MCP Shield Flow"
         Client2[Client e.g., Cursor]
         MCPShield[MCP Shield]
@@ -30,6 +19,19 @@ graph TD
         ManagedMCPServer -- "Return Result" --> MCPShield
         MCPShield -- "Return Aggregated Result" --> Client2
     end
+
+    subgraph "Standard MCP Flow"
+        Client1[Client e.g., Cursor]
+        MCPServer1[Directly Configured MCP Server]
+        Service1[External Service e.g., GitHub API]
+
+        Client1 -- "Invoke Tool" --> MCPServer1
+        MCPServer1 -- "Authenticate & Call Service" --> Service1
+        Service1 -- "Return Data" --> MCPServer1
+        MCPServer1 -- "Return Result" --> Client1
+    end
+
+
 ```
 
 ## Key Differences
