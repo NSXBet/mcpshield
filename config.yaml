@@ -34,6 +34,9 @@ server:
 runtime:
   kubernetes:
     namespace: default
+    # Optional: Path to custom kubeconfig file
+    # If not specified, uses the default kubeconfig location (~/.kube/config)
+    # kubeconfig: "./kubeconfig"
 
 mcp-servers:
   - name: github-npx

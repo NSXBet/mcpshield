@@ -41,7 +41,11 @@ type KubernetesRuntimeFactory struct {
 }
 
 func NewKubernetesRuntimeFactory(namespace string) (pkg.RuntimeFactory, error) {
-	client, clientConfig, err := CreateKubernetesClient()
+	return NewKubernetesRuntimeFactoryWithKubeconfig(namespace, "")
+}
+
+func NewKubernetesRuntimeFactoryWithKubeconfig(namespace string, kubeconfigPath string) (pkg.RuntimeFactory, error) {
+	client, clientConfig, err := CreateKubernetesClientWithKubeconfig(kubeconfigPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Kubernetes client: %w", err)
 	}
@@ -375,7 +379,17 @@ func (k *KubernetesRuntime) getCleanName() string {
 }
 
 func CreateKubernetesClient() (*kubernetes.Clientset, clientcmd.ClientConfig, error) {
-	kubeconfig := filepath.Join(os.Getenv("HOME"), ".kube", "config")
+	return CreateKubernetesClientWithKubeconfig("")
+}
+
+func CreateKubernetesClientWithKubeconfig(kubeconfigPath string) (*kubernetes.Clientset, clientcmd.ClientConfig, error) {
+	var kubeconfig string
+	if kubeconfigPath != "" {
+		kubeconfig = kubeconfigPath
+	} else {
+		kubeconfig = filepath.Join(os.Getenv("HOME"), ".kube", "config")
+	}
+
 	config := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
 		&clientcmd.ClientConfigLoadingRules{ExplicitPath: kubeconfig},
 		&clientcmd.ConfigOverrides{},

@@ -7,6 +7,9 @@ dist/
 .env
 .env.local
 
+# Kubernetes config
+kubeconfig
+
 # IDE
 .vscode/
 .idea/

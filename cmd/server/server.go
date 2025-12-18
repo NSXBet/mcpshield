@@ -24,8 +24,8 @@ func StartServer(config *pkg.Config) error {
 		return fmt.Errorf("kubernetes runtime configuration is required")
 	}
 
-	// Create runtime factory with configured namespace
-	factory, err := runtime.NewKubernetesRuntimeFactory(config.GetKubernetesNamespace())
+	// Create runtime factory with configured namespace and kubeconfig
+	factory, err := runtime.NewKubernetesRuntimeFactoryWithKubeconfig(config.GetKubernetesNamespace(), config.GetKubeconfig())
 	if err != nil {
 		logger.Error("Failed to create runtime factory", "error", err)
 		return err

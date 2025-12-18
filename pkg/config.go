@@ -46,7 +46,8 @@ type MCPServerConfig struct {
 }
 
 type KubernetesConfig struct {
-	Namespace string `yaml:"namespace"`
+	Namespace  string `yaml:"namespace"`
+	Kubeconfig string `yaml:"kubeconfig,omitempty"`
 }
 
 type RuntimeConfig struct {
@@ -63,6 +64,13 @@ func (c *Config) GetKubernetesNamespace() string {
 
 func (c *Config) HasKubernetesRuntime() bool {
 	return c.Runtime.Kubernetes != nil
+}
+
+func (c *Config) GetKubeconfig() string {
+	if c.Runtime.Kubernetes == nil || c.Runtime.Kubernetes.Kubeconfig == "" {
+		return ""
+	}
+	return c.Runtime.Kubernetes.Kubeconfig
 }
 
 func (c *Config) GetServerAddress() string {
